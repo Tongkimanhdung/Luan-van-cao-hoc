@@ -6,8 +6,6 @@
 ***/
 
 model NewModel
-global {
-	
-}
+
 /* Insert your model definition here */
 
