@@ -9,5 +9,7 @@ model NewModel
 global {
 	
 }
+experiment aaa{
+}
 /* Insert your model definition here */
 
