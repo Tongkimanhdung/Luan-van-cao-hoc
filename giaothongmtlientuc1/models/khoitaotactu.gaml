@@ -9,18 +9,20 @@ model khoitaotactu
 global {
     geometry shape<-envelope(shape_file_roads);// view
     file shape_file_buildings <- file("../includes/nkBuildingSimple2.shp");
-    file shape_file_roads <- file("../includes/roads_sample.shp");
+    file shape_file_roads <- file("../includes/nkRoadsSimple3/nkRoadsSimple3.shp");
     file shape_file_bounds <- file("../includes/bounds.shp");
     float step <- 1 #mn;
     int nb_people <- 2;
     int total_people -> {length (people)};
-    
-    
+    float size_people <- 10.0;
+    float speed_people <- 0.1;
     
     int threshold_on_cell <- 4; // ngưỡng tắc đường, nếu số người trên 1 cell >= ngưỡng thì tắc đường, ngược lại đường thông thoáng có thể đi
     bool solution_traffic <- false;
     float prob_road_broken <- 0.00001;
     float prob_road_repair <- 0.001;
+    float prob_comback <- 0.1 max: 1.0;
+    float prob_continued <- 0.2 max: 1.0;
     
     graph the_graph;// graphicscho phép người lập hm tự do vẽ các hình dạng / hình học /văn bản mà không cần phải xác định loà
     init {
@@ -34,7 +36,6 @@ global {
     		duongdi<-true;
     		color<-#black;
     	}
-    	
     }
          the_graph <- as_edge_graph(road);  
    
@@ -45,6 +46,11 @@ global {
     	nha <- location;
     	}
     }
+    
+    reflex stop_simulation when: (total_people = 0) {
+		do pause ;
+	} 
+    
 }
 
 species building {
@@ -71,42 +77,39 @@ species road  {
 
 species people skills:[moving]{
     rgb color <- #yellow ;
+    float size <- size_people;
+    float speed <- speed_people;
     string hoten;
     string dc;
     string nghenghiep;
     point dichden;
     point nha;
     string hanhvi;
-	
+	bool tatduong <- false;
 	
   	cell mycell;
+  	cell cell_dichden update: cell at dichden.location;
 	list<people> test update: people inside (mycell);// ds con nguoi có mat trong ô cùng ô hiện hành
 	//list neighbors <- people where (each.location distance_to self.location < 1);
-	
+	bool at_leduong <- false;
 	
 	reflex update_mycell {
 		mycell <- cell at location;
+		if (mycell.leduong){
+			at_leduong <- true;
+		}else{
+			at_leduong <- false;
+		}
 	}
   	
     reflex dichuyen when: dichden != nil{
-    	bool tatduong <- false; // chua tat duong
-    	if (mycell.cd >= threshold_on_cell) {
-    		tatduong <- true;
-    	}
 		
 		if (! tatduong){
-    		do goto  on:(cell where (each.duongdi = true and each.broken = false)) target:dichden speed:0.01;// cell=true co duong =nil khong can thi di
+			if (mycell.broken = false){
+				do goto  on:(cell where (each.duongdi = true)) target:dichden speed:speed;// cell=true co duong =nil khong can thi di	
+			}
 		} else {
 			if (solution_traffic) {
-				int rand <- rnd(1); // gia su 0 la quay dau, 1 la tieptuc
-				switch rand {
-					match 0 {
-						hanhvi <- "quaydau";
-					}
-					match 1 {
-						hanhvi <- "tieptuc";
-					}
-				}
 				if (hanhvi = "quaydau"){
        				dichden <- nha;	
         		}
@@ -116,7 +119,7 @@ species people skills:[moving]{
 			}
 		}
     	
-    	if(location distance_to dichden<1){
+    	if(mycell = cell_dichden){
     		//dichden <- any_location_in (one_of (road));
     		dichden <- nil;
         }
@@ -124,12 +127,33 @@ species people skills:[moving]{
         	
     }
     
+    reflex statut_tatduong {
+    	//bool tatduong <- false; // chua tat duong
+    	if (mycell.cd >= threshold_on_cell) {
+    		tatduong <- true;
+    	}else{
+    		tatduong <- false;
+    	}
+    }
+    
+    reflex decide_comback when: (tatduong = true and flip(prob_comback)) {
+    	hanhvi <- "quaydau";
+    }
+    
+    reflex decide_continued when: (tatduong = true and flip(prob_continued)) {
+    	hanhvi <- "tieptuc";
+    }
+    
+    reflex refresh_hanhvi when: tatduong = false and at_leduong = false {
+    	hanhvi <- nil;
+    }
+    
     reflex disappear when: dichden = nil {
     	do die;
     }
     
     aspect base {
-  	  draw circle(0.5) color: color border: #black;
+  	  draw circle(size) color: color border: #black;
     }
 }
 
@@ -183,6 +207,11 @@ experiment khoitaotactu type: gui {
     parameter "Shapefile for the bounds:" var: shape_file_bounds category: "GIS" ;
     
     parameter "Number of people agents" var: nb_people category: "People" ;
+    parameter "Size of people:" var: size_people category: "People";
+    parameter "Speed of people:" var: speed_people category: "People";
+    parameter "Probability to comback:" var: prob_comback category: "People";
+    parameter "Probability to continued:" var: prob_continued category: "People";
+    
     
     parameter "Solution traffic jam:" category:"Road" var: solution_traffic colors: [#blue, #lightskyblue];
     parameter "Threshold of people on cell:" var: threshold_on_cell category: "Road";
@@ -197,11 +226,31 @@ experiment khoitaotactu type: gui {
         grid cell lines:#black;
         species road aspect: base ;
         species people aspect: base ;
-    }
+    }   
+     
+    display People_comback refresh: every(1#cycles) {
+		chart "People_comback" type: series size: {1,0.5} position: {0, 0} {
+			data "number_of_people" value: people count (each.hanhvi = "quaydau") color: #blue ;
+			//data "number_of_predator" value: nb_predators color: #red ;
+		}    
+		
+		chart "People_continued" type: series size: {1,0.5} position: {0, 0.5} {
+			data "number_of_people" value: people count (each.hanhvi = "tieptuc") color: #red ;
+			//data "number_of_predator" value: nb_predators color: #red ;
+		}  
+    }    
+    
+    display People_at_leduong refresh: every(1#cycles) {
+		chart "People_comback" type: series size: {1,0.5} position: {0, 0} {
+			data "number_of_people" value: people count (each.at_leduong = true) color: #blue ;
+			//data "number_of_predator" value: nb_predators color: #red ;
+		}    
+    } 
+    
     
     monitor "Number of people:" value: total_people;
     monitor "Number of people come back:" value: people count (each.hanhvi = "quaydau");
     monitor "Number of people continued:" value: people count (each.hanhvi = "tieptuc");
-    
+    //monitor "Leole:" value: people count (each.at_leduong = true);   
     }
 }
