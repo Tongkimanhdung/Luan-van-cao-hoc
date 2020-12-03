@@ -5,7 +5,7 @@
 * Tags: Tag1, Tag2, TagN
 ***/
 
-model khoitaotactu
+model mophonggiaothong
 global {
     geometry shape<-envelope(shape_file_roads);// view
     file shape_file_buildings <- file("../includes/nkBuildingSimple2.shp");
@@ -323,7 +323,7 @@ grid cell width:50 height:50 neighbors:8{
 	  
 }
 
-experiment khoitaotactu type: gui {
+experiment giaothongtpct type: gui {
     parameter "Shapefile for the buildings:" var: shape_file_buildings category: "GIS" ;
     parameter "Shapefile for the roads:" var: shape_file_roads category: "GIS" ;
     parameter "Shapefile for the bounds:" var: shape_file_bounds category: "GIS" ;
@@ -356,7 +356,7 @@ experiment khoitaotactu type: gui {
     
     
     output {
-    display khotaitt type:opengl {
+    display mophonggttpct type:opengl {
         species building aspect: base ;
         grid cell lines:#black;
         species road aspect: base ;
